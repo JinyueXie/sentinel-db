@@ -18,3 +18,7 @@ tmp_baf/
 .idea/
 *.swp
 *.swo
+
+Base.csv
+*.csv 
+/Base.csv

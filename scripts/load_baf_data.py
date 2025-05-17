@@ -6,6 +6,7 @@ import kaggle
 import psycopg2
 from psycopg2.extras import execute_batch
 from dotenv import load_dotenv
+import numpy as np
 import shutil # For cleaning up
 
 # Load environment variables
@@ -89,10 +90,10 @@ try:
     # Convert DataFrame rows to list of tuples for execute_batch
     rows = [
         (
-            row['income'], row['name_email_similarity'], row['prev_address_months_count'],
-            row['current_address_months_count'], row['customer_age'], row['days_since_request'],
-            row['intended_balcon_amount'], row['zip_count_4w'], row['velocity_6h'],
-            row['velocity_24h'], bool(row['fraud_bool'])
+            float(row['income']),float(row['name_email_similarity']), int(row['prev_address_months_count']),
+            int(row['current_address_months_count']), int(row['customer_age']), float(row['days_since_request']),
+            float(row['intended_balcon_amount']), int(row['zip_count_4w']), float(row['velocity_6h']),
+            float(row['velocity_24h']), bool(row['fraud_bool'])
         )
         for _, row in df.iterrows()
     ]
