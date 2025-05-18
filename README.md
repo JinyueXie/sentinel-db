@@ -17,7 +17,18 @@ This project focuses on:
 This project uses the **Bank Account Fraud (BAF)** dataset suite — a large-scale, privacy-preserving, and realistic collection of tabular datasets designed for fraud detection in financial services.
 
 ---
+## Database Access and Security (Local Setup)
 
+        Currently, the PostgreSQL database (`sentineldb`) for this project is configured to run locally on the developer's machine. All scripts (`load_baf_data.py`, `db_monitor.py`, `backup_db.sh`) are designed to connect to this local instance via `localhost`.
+
+        **Key Security Points for Local Setup:**
+        * **Credentials:** Database credentials (username, password, host, port, dbname) are managed via a `.env` file in the project root. This file should be listed in `.gitignore` and **never** committed to version control. An `.env.example` file should be provided as a template.
+        * **Remote Access:** Remote network access to this local PostgreSQL instance is **not configured by default** and is generally not recommended for a local development database without proper network security measures (firewalls, VPNs, etc.).
+        * **`.pgpass` (Optional):** For convenience with command-line tools like `psql` and `pg_dump`, users can configure a `~/.pgpass` file.
+        * **Firewall:** No specific `ufw` rules are applied by this project for the local setup, as connections are typically via `localhost`.
+
+        For any deployment to a shared or cloud environment (like the planned AWS RDS setup), robust security measures including AWS Security Groups, IAM roles, and secure secret management (e.g., AWS Secrets Manager) would be implemented.
+        
 ### 🔍 Source & Citation
 
 - 📥 **Dataset**: [Kaggle – Bank Account Fraud Dataset (BAF)](https://www.kaggle.com/datasets/sgpjesus/bank-account-fraud-dataset-neurips-2022)  
