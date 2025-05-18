@@ -26,24 +26,21 @@ jobs:
       # KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}         # If needed for data loading tests
 
     services:
-      # Spin up a PostgreSQL service container for this job
       postgres:
-        image: postgres:14-alpine # Use a specific version, alpine for smaller size
+        image: postgres:14-alpine
         env:
-          POSTGRES_USER: postgres_ci_user # Must match PG_USER above
-          POSTGRES_PASSWORD: ${{ secrets.CI_PG_PASSWORD }} # Must match PG_PASSWORD
-          POSTGRES_DB: sentineldb_ci_test   # Must match PG_DBNAME
+          POSTGRES_USER: postgres_ci_user
+          POSTGRES_PASSWORD: ${{ secrets.CI_PG_PASSWORD }}
+          POSTGRES_DB: sentineldb_ci_test
         ports:
-          - 5432:5432 # Map port 5432 on the service to port 5432 on the runner
-        # Health check to wait until postgres is ready
+          - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U postgres_ci_user -d sentineldb_ci_test" # Quoted for correctness
+          --health-cmd "pg_isready -U postgres_ci_user -d sentineldb_ci_test"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
 
     steps:
-      # Step 1: Check out your repository code
       - name: Checkout repository
         uses: actions/checkout@v4 # Use the latest version of the checkout action
 
