@@ -87,7 +87,6 @@ jobs:
 
       # Step 6: Run the database monitor script
       # It will connect to the PostgreSQL service container we defined
-        echo "About to run the DB monitor script on branch test-ci-workflow!"
       - name: Run database monitor script
         # The script is in scripts/, so we run it from the root of the repo
         run: python3 scripts/db_monitor.py
