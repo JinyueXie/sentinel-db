@@ -1,0 +1,112 @@
+# .github/workflows/ci.yml
+name: SentinelDB CI Pipeline
+
+# Triggers the workflow on push events to the main branch
+# and also on pull requests targeting the main branch.
+on:
+  push:
+    branches: [ main ] # Or your primary branch name, e.g., master
+  pull_request:
+    branches: [ main ] # Or your primary branch name
+
+jobs:
+  # Job to check database monitoring script and simulate backup
+  operations_check:
+    name: Run Operational Scripts
+    runs-on: ubuntu-latest # Use the latest Ubuntu runner
+
+    # Environment variables available to all steps in this job
+    # These would ideally be set as GitHub Secrets for actual credentials
+    # For now, we'll use placeholder values or rely on defaults in scripts
+    env:
+      PG_DBNAME: sentineldb_ci_test # Use a test DB name for CI
+      PG_USER: postgres_ci_user   # Use a test user for CI
+      PG_PASSWORD: ${{ secrets.CI_PG_PASSWORD }} # BEST PRACTICE: Use GitHub Secrets!
+      PG_HOST: localhost # This will point to the service container
+      PG_PORT: 5432      # Port for the service container
+      # KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }} # If needed for data loading tests
+      # KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}         # If needed for data loading tests
+
+    services:
+      # Spin up a PostgreSQL service container for this job
+      postgres:
+        image: postgres:14-alpine # Use a specific version, alpine for smaller size
+        env:
+          POSTGRES_USER: postgres_ci_user # Must match PG_USER above
+          POSTGRES_PASSWORD: ${{ secrets.CI_PG_PASSWORD }} # Must match PG_PASSWORD
+          POSTGRES_DB: sentineldb_ci_test   # Must match PG_DBNAME
+        ports:
+          - 5432:5432 # Map port 5432 on the service to port 5432 on the runner
+        # Optional: health check to wait until postgres is ready
+        options: >-
+          --health-cmd pg_isready -U postgres_ci_user -d sentineldb_ci_test
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      # Step 1: Check out your repository code
+      - name: Checkout repository
+        uses: actions/checkout@v4 # Use the latest version of the checkout action
+
+      # Step 2: Set up Python
+      - name: Set up Python
+        uses: actions/setup-python@v5 # Use the latest version
+        with:
+          python-version: '3.10' # Specify your Python version
+
+      # Step 3: Install Python dependencies
+      # This step assumes you will create a requirements.txt file
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then 
+            pip install -r requirements.txt
+          else
+            echo "requirements.txt not found. Installing common packages."
+            pip install psycopg2-binary python-dotenv kaggle pandas
+          fi
+
+      # Step 4: Create a dummy .env file for CI if PG_PASSWORD is set
+      # This is because db_monitor.py tries to load .env.
+      # Note: Ensure .env is in your .gitignore!
+      - name: Create dummy .env for CI
+        if: env.PG_PASSWORD != '' # Only run if the secret is presumably set
+        run: |
+          echo "Creating dummy .env for CI run..."
+          echo "PG_DBNAME=${{ env.PG_DBNAME }}" > .env
+          echo "PG_USER=${{ env.PG_USER }}" >> .env
+          echo "PG_PASSWORD=${{ env.PG_PASSWORD }}" >> .env
+          echo "PG_HOST=${{ env.PG_HOST }}" >> .env
+          echo "PG_PORT=${{ env.PG_PORT }}" >> .env
+        # This .env file will be at the root of the checked-out code in the runner
+
+      # Step 5: Create logs directory (db_monitor.py needs it)
+      - name: Create logs directory
+        run: mkdir -p logs
+
+      # Step 6: Run the database monitor script
+      # It will connect to the PostgreSQL service container we defined
+      - name: Run database monitor script
+        # The script is in scripts/, so we run it from the root of the repo
+        run: python3 scripts/db_monitor.py
+
+      # Step 7: Make backup_db.sh executable
+      - name: Make backup script executable
+        run: chmod +x backup_db.sh
+
+      # Step 8: Simulate running the backup script
+      # The actual pg_dump would try to connect to the service container.
+      - name: Simulate backup script run
+        run: |
+          echo "Simulating backup_db.sh execution..."
+          # To actually run it against the service DB, you might need to adjust backup_db.sh
+          # to accept parameters or use environment variables consistent with CI.
+          # For now, a simple simulation:
+          TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+          BACKUP_FILE="backups/sentineldb_ci_$TIMESTAMP.dump" # This path is relative to repo root
+          mkdir -p backups # Ensure backups directory exists in CI runner for this simulation
+          echo "✅ Simulated Backup would be saved to $BACKUP_FILE" > "$BACKUP_FILE" # Create a dummy file
+          echo "✅ Simulated backup complete"
+          ls -la backups # List content of backups directory for verification
+
