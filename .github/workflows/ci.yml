@@ -16,8 +16,6 @@ jobs:
     runs-on: ubuntu-latest # Use the latest Ubuntu runner
 
     # Environment variables available to all steps in this job
-    # These would ideally be set as GitHub Secrets for actual credentials
-    # For now, we'll use placeholder values or rely on defaults in scripts
     env:
       PG_DBNAME: sentineldb_ci_test # Use a test DB name for CI
       PG_USER: postgres_ci_user   # Use a test user for CI
@@ -37,9 +35,9 @@ jobs:
           POSTGRES_DB: sentineldb_ci_test   # Must match PG_DBNAME
         ports:
           - 5432:5432 # Map port 5432 on the service to port 5432 on the runner
-        # Optional: health check to wait until postgres is ready
+        # Health check to wait until postgres is ready
         options: >-
-          --health-cmd pg_isready -U postgres_ci_user -d sentineldb_ci_test
+          --health-cmd "pg_isready -U postgres_ci_user -d sentineldb_ci_test" # Quoted for correctness
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -87,10 +85,11 @@ jobs:
 
       # Step 6: Run the database monitor script
       # It will connect to the PostgreSQL service container we defined
-        echo "About to run the DB monitor script on branch test-ci-workflow!"
       - name: Run database monitor script
         # The script is in scripts/, so we run it from the root of the repo
-        run: python3 scripts/db_monitor.py
+        run: | # CORRECTED: Added pipe for multi-line script
+          echo "About to run the DB monitor script on branch test-ci-workflow!"
+          python3 scripts/db_monitor.py
 
       # Step 7: Make backup_db.sh executable
       - name: Make backup script executable
@@ -110,4 +109,3 @@ jobs:
           echo "✅ Simulated Backup would be saved to $BACKUP_FILE" > "$BACKUP_FILE" # Create a dummy file
           echo "✅ Simulated backup complete"
           ls -la backups # List content of backups directory for verification
-
