@@ -62,31 +62,6 @@ Currently, the PostgreSQL database (`sentineldb`) for this project is configured
 
 For any deployment to a shared or cloud environment (like the planned AWS RDS setup), robust security measures including AWS Security Groups, IAM roles, and secure secret management (e.g., AWS Secrets Manager) would be implemented.
 
-## ⚙️ Project Structure
-
-sentinel-db/
-├── .github/
-│   ├── workflows/
-│   │   └── ci.yml         # GitHub Actions CI for local script testing
-│   └── SECURITY.md        # Security policy
-├── backups/               # (Created by backup_db.sh, gitignored)
-├── logs/                  # (Created by db_monitor.py, gitignored)
-├── scripts/
-│   ├── load_baf_data.py # Loads data from Kaggle to local PostgreSQL
-│   └── db_monitor.py    # Checks local DB status and logs it
-├── terraform/aws/         # Terraform configurations for AWS
-│   ├── main.tf
-│   ├── variables.tf
-│   ├── outputs.tf
-│   └── terraform.tfvars   # (Gitignored - for local AWS secrets/variables)
-├── .env                   # Local environment variables (gitignored)
-├── .env.example           # Example environment file
-├── .gitignore
-├── backup_db.sh           # Shell script for local database backups
-├── demo_checklist.md      # Checklist for project demonstration
-├── README.md              # This file
-└── requirements.txt       # Python dependencies
-
 
 ## 🚀 Local Setup and Usage
 
@@ -158,65 +133,3 @@ sentinel-db/
 6.  **IMPORTANT:** Destroy AWS resources after testing to avoid costs: `terraform destroy` (Type `yes` to confirm)
 
 ---
-
-## ☁️ Future Cloud Architecture & CI/CD Vision (Roadmap)
-
-The long-term vision for this project is to deploy and manage the infrastructure in AWS using Terraform, with an enhanced CI/CD pipeline.
-
-```mermaid
-graph TB
-    subgraph "Local Development & CI (Current)"
-        DevLaptop[Developer Laptop] -->|Git Push| GitHubRepo[GitHub Repository]
-        GitHubRepo -->|Trigger| GHActionsCI[GitHub Actions CI - Local Tests]
-        GHActionsCI -.-> ServiceDB[(PostgreSQL Service Container for CI)]
-        DevLaptop -->|Terraform Plan/Apply/Destroy Locally| AWSResourcesLocalMgmt[AWS Resources (Manual Local Mgmt)]
-    end
-
-    subgraph "Future: AWS Cloud & CI/CD Automation"
-        AWS[AWS Cloud]
-        subgraph AWS
-            S3Bucket[BAF CSV & Backups in S3 Bucket]
-            Loader[EC2/Lambda Loader (Python)] 
-            RDS[Amazon RDS for PostgreSQL]
-            CW[CloudWatch Metrics & Logs]
-            LambdaAlert[Lambda Alert Handler]
-        end
-        
-        GitHubRepo -->|Trigger on main branch| GHActionsTerraform[GitHub Actions CI/CD - Terraform]
-        GHActionsTerraform -->|Terraform Plan & Apply| RDS
-        GHActionsTerraform -->|Terraform Plan & Apply| S3Bucket
-        GHActionsTerraform -->|Terraform Plan & Apply| CW
-        GHActionsTerraform -->|Terraform Plan & Apply| LambdaAlert
-        
-        Loader --> RDS
-        RDS --> CW
-        CW -->|Alarm| LambdaAlert
-        
-        GHActionsCI -->|Run Scripts Against| RDS # Future: CI tests against deployed RDS
-    end
-
-Amazon S3: For storing the raw BAF dataset and database backups.
-
-EC2/Lambda Loader: Python script (adapted load_baf_data.py) to load data from S3 to RDS.
-
-Amazon RDS for PostgreSQL: Managed PostgreSQL database service.
-
-CloudWatch: For collecting metrics and logs from RDS. CloudWatch Alarms will trigger alerts.
-
-AWS Lambda Alert Handler: Triggered by CloudWatch Alarms to send notifications.
-
-Terraform: Infrastructure as Code (IaC) to define and provision all AWS resources.
-
-GitHub Actions (Enhanced CI/CD):
-
-Validate Terraform code.
-
-Automatically terraform plan on Pull Requests to main.
-
-Automatically terraform apply on merges/pushes to main (for a dev/test environment).
-
-Manually triggered terraform destroy for dev/test environments.
-
-Run application scripts (db_monitor.py, backup_db.sh adapted for AWS) against the deployed AWS resources.
-
-This cloud setup will provide a more scalable, resilient, and production-like environment for the `sentinel
