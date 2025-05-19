@@ -50,8 +50,6 @@ jobs:
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
-        # with:
-        #   terraform_version: "1.x.x" # Optional: specify version
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -71,17 +69,22 @@ jobs:
       - name: Terraform Plan
         id: plan
         run: terraform plan -no-color -input=false -out=tfplan
-        # continue-on-error: true # Uncomment if you want the workflow to continue to show plan even if it might fail apply
-
-      # Optional: Add step to comment plan output on PR (more advanced)
 
   terraform_apply_on_main_push:
     name: Terraform Apply (on push to main)
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' # Only on push to main
+    # if: github.event_name == 'push' && github.ref == 'refs/heads/main' # This condition is good
+    # needs: [terraform_plan_on_pr] # REMOVED: This is problematic as plan_on_pr only runs for PRs
+    # CORRECTED if condition: comment moved to its own line for clarity and proper parsing
+    # Avoid running apply for doc-only commits to main
+    if: >- # Using >- for a multi-line if condition, though not strictly necessary if kept on one line without the bad comment
+      github.event_name == 'push' && 
+      github.ref == 'refs/heads/main' &&
+      !contains(github.event.head_commit.message, 'docs:') &&
+      !contains(github.event.head_commit.message, 'README')
+      # A more robust way to check commit messages for "docs only"
+      # Simpler version without checking commit message:
+      # if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    needs: [terraform_plan_on_pr] # Optional: if you want PR plan to be a prerequisite conceptually (not strictly enforced here without more logic)
-    if: success() && github.event.head_commit.message != 'docs: Update README.md with new information' && github.event.head_commit.message != 'docs: Add demo checklist for project presentation' && github.event.head_commit.message != 'docs: Comprehensive update to README reflecting current project state and future vision' # Avoid running apply for doc-only commits to main
-
     defaults:
       run:
         working-directory: ${{ env.TF_WORKING_DIR }}
@@ -148,3 +151,4 @@ jobs:
           echo "🚨 Preparing to DESTROY infrastructure in AWS region: ${{ env.AWS_REGION }} 🚨"
           echo "Verify this is the intended action for environment defined in terraform/aws/"
           terraform destroy -auto-approve -input=false
+
