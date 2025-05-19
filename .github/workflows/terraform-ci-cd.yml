@@ -85,6 +85,12 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
       - name: Terraform Init
         run: terraform init -input=false
+      - name: Import Existing Resources
+        run: |
+          # Import subnet group
+          terraform import aws_db_subnet_group.rds_subnet_group sentineldb-rds-subnet-group-dev
+          # Import S3 bucket
+          terraform import aws_s3_bucket.backups sentineldb-db-backups-dev-388062816353
       - name: Terraform Apply
         run: terraform apply -auto-approve -input=false -var="rds_password=${{ secrets.TF_VAR_RDS_PASSWORD }}"
         # To use a plan file from a previous job (more advanced setup needed for passing artifacts):
@@ -109,14 +115,12 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
       - name: Terraform Init
         run: terraform init -input=false
-# Add this after the "Terraform Init" step in your workflow file
       - name: Import Existing Resources
         run: |
-    # Import subnet group
-        terraform import aws_db_subnet_group.rds_subnet_group sentineldb-rds-subnet-group-dev
-    # Import S3 bucket
-        terraform import aws_s3_bucket.backups sentineldb-db-backups-dev-388062816353
-      working-directory: ${{ env.TF_WORKING_DIR }}
+          # Import subnet group
+          terraform import aws_db_subnet_group.rds_subnet_group sentineldb-rds-subnet-group-dev
+          # Import S3 bucket
+          terraform import aws_s3_bucket.backups sentineldb-db-backups-dev-388062816353
       - name: Terraform Plan (Manual)
         if: github.event.inputs.action == 'plan'
         run: terraform plan -no-color -input=false
@@ -128,4 +132,5 @@ jobs:
         run: |
           echo "🚨 Preparing to DESTROY infrastructure in AWS region: ${{ env.AWS_REGION }} 🚨"
           echo "Verify this is the intended action for environment defined in terraform/aws/"
-          terraform destroy -auto-approve -input=false
+          terraform destroy -auto-approve -input=false -var="rds_password=${{ secrets.TF_VAR_RDS_PASSWORD }}"
+
