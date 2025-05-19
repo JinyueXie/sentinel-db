@@ -14,7 +14,6 @@ on:
     paths:
       - 'terraform/aws/**'
       - '.github/workflows/terraform-ci-cd.yml'
-  # Allow manual triggering from the GitHub Actions UI
   workflow_dispatch:
     inputs:
       action:
