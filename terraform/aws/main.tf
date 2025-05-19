@@ -111,7 +111,7 @@ resource "aws_route_table_association" "public_b" {
 // RDS needs a subnet group that spans at least two Availability Zones.
 // We'll use our private subnets for the database.
 resource "aws_db_subnet_group" "rds_subnet_group" {
-  name       = "${var.project_name}-rds-subnet-group-${var.environment}"
+  name       = "${lower(var.project_name)}-rds-subnet-group-${var.environment}"
   subnet_ids = [aws_subnet.private_a.id, aws_subnet.private_b.id]
 
   tags = {
@@ -208,13 +208,20 @@ resource "aws_s3_bucket" "backups" {
 
 resource "aws_s3_bucket_lifecycle_configuration" "cleanup" {
   bucket = aws_s3_bucket.backups.id
-
   rule {
     id     = "auto-delete-after-1-day"
     status = "Enabled"
 
+    filter {
+      prefix = ""
+    }  # <-- THIS LINE IS REQUIRED!
+
     expiration {
       days = 1
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = 1
     }
 
     abort_incomplete_multipart_upload {
