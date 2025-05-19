@@ -72,18 +72,16 @@ jobs:
 
   terraform_apply_on_main_push:
     name: Terraform Apply (on push to main)
-    # if: github.event_name == 'push' && github.ref == 'refs/heads/main' # This condition is good
-    # needs: [terraform_plan_on_pr] # REMOVED: This is problematic as plan_on_pr only runs for PRs
-    # CORRECTED if condition: comment moved to its own line for clarity and proper parsing
-    # Avoid running apply for doc-only commits to main
-    if: >- # Using >- for a multi-line if condition, though not strictly necessary if kept on one line without the bad comment
-      github.event_name == 'push' && 
+    # This job runs if:
+    # 1. The event is a 'push'.
+    # 2. The push is to the 'main' branch.
+    # 3. The commit message does NOT contain 'docs:' (case-insensitive).
+    # 4. The commit message does NOT contain 'README' (case-insensitive).
+    if: | # Using a multi-line block scalar for readability of the condition
+      github.event_name == 'push' &&
       github.ref == 'refs/heads/main' &&
-      !contains(github.event.head_commit.message, 'docs:') &&
-      !contains(github.event.head_commit.message, 'README')
-      # A more robust way to check commit messages for "docs only"
-      # Simpler version without checking commit message:
-      # if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      !contains(lower(github.event.head_commit.message), 'docs:') &&
+      !contains(lower(github.event.head_commit.message), 'readme')
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -108,9 +106,8 @@ jobs:
 
       - name: Terraform Apply
         run: terraform apply -auto-approve -input=false
-        # Use the plan file if you want to ensure only planned changes are applied:
+        # To use a plan file from a previous job (more advanced setup needed for passing artifacts):
         # run: terraform apply -auto-approve -input=false tfplan 
-        # (This would require the tfplan file to be passed from the plan job, e.g. via artifacts)
 
   terraform_manual_action:
     name: Terraform Manual Action (Plan/Apply/Destroy)
