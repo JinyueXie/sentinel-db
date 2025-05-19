@@ -87,7 +87,7 @@ jobs:
       - name: Terraform Init
         run: terraform init -input=false
       - name: Terraform Apply
-        run: terraform apply -auto-approve -input=false
+        run: terraform apply -auto-approve -input=false -var="rds_password=${{ secrets.TF_VAR_RDS_PASSWORD }}"
         # To use a plan file from a previous job (more advanced setup needed for passing artifacts):
         # run: terraform apply -auto-approve -input=false tfplan 
   terraform_manual_action:
