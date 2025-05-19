@@ -22,3 +22,33 @@ tmp_baf/
 Base.csv
 *.csv 
 /Base.csv
+
+# In ~/sentinel-db/.gitignore
+terraform/aws/.terraform.lock.hcl
+
+# Terraform state files
+*.tfstate
+*.tfstate.backup
+
+# Terraform crash logs
+crash.log
+
+# Terraform plan files
+*.tfplan
+
+# Terraform variables file (contains secrets like passwords)
+terraform.tfvars
+
+# Local .terraform directories
+.terraform/
+
+# Sensitive override files
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Ignore logs or temp files
+*.log
+*.tmp
+
