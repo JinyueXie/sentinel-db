@@ -109,6 +109,14 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
       - name: Terraform Init
         run: terraform init -input=false
+# Add this after the "Terraform Init" step in your workflow file
+      - name: Import Existing Resources
+        run: |
+    # Import subnet group
+        terraform import aws_db_subnet_group.rds_subnet_group sentineldb-rds-subnet-group-dev
+    # Import S3 bucket
+        terraform import aws_s3_bucket.backups sentineldb-db-backups-dev-388062816353
+      working-directory: ${{ env.TF_WORKING_DIR }}
       - name: Terraform Plan (Manual)
         if: github.event.inputs.action == 'plan'
         run: terraform plan -no-color -input=false
