@@ -1,6 +1,4 @@
-# .github/workflows/terraform-ci-cd.yml
 name: Terraform AWS Infrastructure CI/CD
-
 on:
   # Trigger on pushes to the main branch, but only if files in terraform/aws/ change
   push:
@@ -9,7 +7,6 @@ on:
     paths:
       - 'terraform/aws/**'
       - '.github/workflows/terraform-ci-cd.yml' # Also run if this workflow file changes
-
   # Trigger on Pull Requests targeting the main branch, only if terraform/aws/ files change
   pull_request:
     branches:
@@ -17,7 +14,6 @@ on:
     paths:
       - 'terraform/aws/**'
       - '.github/workflows/terraform-ci-cd.yml'
-
   # Allow manual triggering from the GitHub Actions UI
   workflow_dispatch:
     inputs:
@@ -30,11 +26,9 @@ on:
           - plan
           - apply
           - destroy
-
 env:
   AWS_REGION: "us-east-1"  # Change this if your default region in variables.tf is different
   TF_WORKING_DIR: ./terraform/aws # Sets the working directory for Terraform commands
-
 jobs:
   terraform_plan_on_pr:
     name: Terraform Plan (on PR)
@@ -43,72 +37,59 @@ jobs:
     defaults:
       run:
         working-directory: ${{ env.TF_WORKING_DIR }}
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
-
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
-
       - name: Terraform Init
         id: init
         run: terraform init -input=false
-
       - name: Terraform Validate
         id: validate
         run: terraform validate
-
       - name: Terraform Plan
         id: plan
         run: terraform plan -no-color -input=false -out=tfplan
-
   terraform_apply_on_main_push:
     name: Terraform Apply (on push to main)
     # This job runs if:
     # 1. The event is a 'push'.
     # 2. The push is to the 'main' branch.
-    # 3. The commit message does NOT contain 'docs:' (case-insensitive).
-    # 4. The commit message does NOT contain 'README' (case-insensitive).
-    if: | # Using a multi-line block scalar for readability of the condition
+    # 3. The commit message does NOT contain 'docs:' or 'DOCS:' (case-sensitive check for both).
+    # 4. The commit message does NOT contain 'readme' or 'README' (case-sensitive check for both).
+    if: |
       github.event_name == 'push' &&
       github.ref == 'refs/heads/main' &&
-      !contains(toLowerCase(github.event.head_commit.message), 'docs:') &&
-      !contains(toLowerCase(github.event.head_commit.message), 'readme')
+      (!contains(github.event.head_commit.message, 'docs:') && !contains(github.event.head_commit.message, 'DOCS:')) &&
+      (!contains(github.event.head_commit.message, 'readme') && !contains(github.event.head_commit.message, 'README'))
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: ${{ env.TF_WORKING_DIR }}
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
-
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
-
       - name: Terraform Init
         run: terraform init -input=false
-
       - name: Terraform Apply
         run: terraform apply -auto-approve -input=false
         # To use a plan file from a previous job (more advanced setup needed for passing artifacts):
         # run: terraform apply -auto-approve -input=false tfplan 
-
   terraform_manual_action:
     name: Terraform Manual Action (Plan/Apply/Destroy)
     if: github.event_name == 'workflow_dispatch' # Only when manually triggered
@@ -116,36 +97,28 @@ jobs:
     defaults:
       run:
         working-directory: ${{ env.TF_WORKING_DIR }}
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
-
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
-
       - name: Terraform Init
         run: terraform init -input=false
-
       - name: Terraform Plan (Manual)
         if: github.event.inputs.action == 'plan'
         run: terraform plan -no-color -input=false
-
       - name: Terraform Apply (Manual)
         if: github.event.inputs.action == 'apply'
         run: terraform apply -auto-approve -input=false
-
       - name: Terraform Destroy (Manual)
         if: github.event.inputs.action == 'destroy'
         run: |
           echo "🚨 Preparing to DESTROY infrastructure in AWS region: ${{ env.AWS_REGION }} 🚨"
           echo "Verify this is the intended action for environment defined in terraform/aws/"
           terraform destroy -auto-approve -input=false
-
