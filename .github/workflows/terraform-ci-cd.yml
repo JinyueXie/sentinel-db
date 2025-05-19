@@ -14,6 +14,7 @@ on:
     paths:
       - 'terraform/aws/**'
       - '.github/workflows/terraform-ci-cd.yml'
+  # Allow manual triggering from the GitHub Actions UI
   workflow_dispatch:
     inputs:
       action:
@@ -25,9 +26,12 @@ on:
           - plan
           - apply
           - destroy
+
 env:
   AWS_REGION: "us-east-1"  # Change this if your default region in variables.tf is different
-  TF_WORKING_DIR: ./terraform/aws # Sets the working directory for Terraform commands
+  TF_WORKING_DIR: ./terraform/aws
+  TF_STATE_BUCKET: "BUCKET_NAME_PLACEHOLDER" # Will replace this in next step
+
 jobs:
   terraform_plan_on_pr:
     name: Terraform Plan (on PR)
@@ -39,32 +43,49 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+      
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
+      
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
-      - name: Terraform Init
-        id: init
-        run: terraform init -input=false
+      
+      - name: Set environment
+        run: |
+          # Use PR number as environment identifier
+          echo "TF_VAR_environment=pr-${{ github.event.pull_request.number }}" >> $GITHUB_ENV
+          echo "TF_WORKSPACE=pr-${{ github.event.pull_request.number }}" >> $GITHUB_ENV
+      
+      - name: Terraform Init with S3 Backend
+        run: |
+          # Create backend configuration
+          cat > backend.tf << EOF
+          terraform {
+            backend "s3" {
+              bucket         = "${{ env.TF_STATE_BUCKET }}"
+              key            = "${{ env.TF_WORKSPACE }}/terraform.tfstate"
+              region         = "${{ env.AWS_REGION }}"
+              encrypt        = true
+            }
+          }
+          EOF
+          
+          terraform init -input=false
+      
       - name: Terraform Validate
-        id: validate
         run: terraform validate
+      
       - name: Terraform Plan
-        id: plan
-        run: terraform plan -no-color -input=false -out=tfplan
+        run: terraform plan -input=false -no-color
         env:
           TF_VAR_rds_password: ${{ secrets.TF_VAR_RDS_PASSWORD }}
-  terraform_apply_on_main_push:
-    name: Terraform Apply (on push to main)
-    # This job runs if:
-    # 1. The event is a 'push'.
-    # 2. The push is to the 'main' branch.
-    # 3. The commit message does NOT contain 'docs:' or 'DOCS:' (case-sensitive check for both).
-    # 4. The commit message does NOT contain 'readme' or 'README' (case-sensitive check for both).
+  
+  terraform_deploy_to_dev:
+    name: Deploy to Development Environment
     if: |
       github.event_name == 'push' &&
       github.ref == 'refs/heads/main' &&
@@ -77,31 +98,53 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+      
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
+      
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
-      - name: Terraform Init
-        run: terraform init -input=false
-      - name: Prepare Environment Variables
-        run: echo "TF_VAR_rds_password=${{ secrets.TF_VAR_RDS_PASSWORD }}" >> $GITHUB_ENV
-      - name: Import Existing Resources
+      
+      - name: Set environment
         run: |
-          # Import subnet group
-          terraform import -input=false aws_db_subnet_group.rds_subnet_group sentineldb-rds-subnet-group-dev || echo "Import failed but continuing"
-          # Import S3 bucket
-          terraform import -input=false aws_s3_bucket.backups sentineldb-db-backups-dev-388062816353 || echo "Import failed but continuing"
+          # Use dev as the fixed environment name
+          echo "TF_VAR_environment=dev" >> $GITHUB_ENV
+          echo "TF_WORKSPACE=dev" >> $GITHUB_ENV
+      
+      - name: Terraform Init with S3 Backend
+        run: |
+          # Create backend configuration
+          cat > backend.tf << EOF
+          terraform {
+            backend "s3" {
+              bucket         = "${{ env.TF_STATE_BUCKET }}"
+              key            = "${{ env.TF_WORKSPACE }}/terraform.tfstate"
+              region         = "${{ env.AWS_REGION }}"
+              encrypt        = true
+            }
+          }
+          EOF
+          
+          terraform init -input=false
+      
       - name: Terraform Apply
         run: terraform apply -auto-approve -input=false
         env:
           TF_VAR_rds_password: ${{ secrets.TF_VAR_RDS_PASSWORD }}
+      
+      - name: Cleanup on Failure
+        if: failure()
+        run: terraform destroy -auto-approve -input=false
+        env:
+          TF_VAR_rds_password: ${{ secrets.TF_VAR_RDS_PASSWORD }}
+  
   terraform_manual_action:
-    name: Terraform Manual Action (Plan/Apply/Destroy)
-    if: github.event_name == 'workflow_dispatch' # Only when manually triggered
+    name: Terraform Manual Action
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -109,39 +152,54 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+      
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
+      
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
-      - name: Terraform Init
-        run: terraform init -input=false
-      - name: Prepare Environment Variables
-        run: echo "TF_VAR_rds_password=${{ secrets.TF_VAR_RDS_PASSWORD }}" >> $GITHUB_ENV
-      - name: Import Existing Resources
+      
+      - name: Set environment
         run: |
-          # Import subnet group
-          terraform import -input=false aws_db_subnet_group.rds_subnet_group sentineldb-rds-subnet-group-dev || echo "Import failed but continuing"
-          # Import S3 bucket
-          terraform import -input=false aws_s3_bucket.backups sentineldb-db-backups-dev-388062816353 || echo "Import failed but continuing"
-      - name: Terraform Plan (Manual)
+          echo "TF_VAR_environment=dev" >> $GITHUB_ENV
+          echo "TF_WORKSPACE=dev" >> $GITHUB_ENV
+      
+      - name: Terraform Init with S3 Backend
+        run: |
+          # Create backend configuration
+          cat > backend.tf << EOF
+          terraform {
+            backend "s3" {
+              bucket         = "${{ env.TF_STATE_BUCKET }}"
+              key            = "${{ env.TF_WORKSPACE }}/terraform.tfstate"
+              region         = "${{ env.AWS_REGION }}"
+              encrypt        = true
+            }
+          }
+          EOF
+          
+          terraform init -input=false
+      
+      - name: Terraform Plan
         if: github.event.inputs.action == 'plan'
-        run: terraform plan -no-color -input=false
+        run: terraform plan -input=false -no-color
         env:
           TF_VAR_rds_password: ${{ secrets.TF_VAR_RDS_PASSWORD }}
-      - name: Terraform Apply (Manual)
+      
+      - name: Terraform Apply
         if: github.event.inputs.action == 'apply'
         run: terraform apply -auto-approve -input=false
         env:
           TF_VAR_rds_password: ${{ secrets.TF_VAR_RDS_PASSWORD }}
-      - name: Terraform Destroy (Manual)
+      
+      - name: Terraform Destroy
         if: github.event.inputs.action == 'destroy'
         run: |
-          echo "🚨 Preparing to DESTROY infrastructure in AWS region: ${{ env.AWS_REGION }} 🚨"
-          echo "Verify this is the intended action for environment defined in terraform/aws/"
+          echo "🚨 Destroying all infrastructure in environment: dev 🚨"
           terraform destroy -auto-approve -input=false
         env:
           TF_VAR_rds_password: ${{ secrets.TF_VAR_RDS_PASSWORD }}

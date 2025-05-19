@@ -1,0 +1,150 @@
+name: AWS Resource Cleanup
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "CONFIRM" to proceed with deletion of all resources'
+        required: true
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.confirm == 'CONFIRM'
+    steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Delete RDS Instances
+        run: |
+          # List all RDS instances with sentineldb prefix
+          INSTANCES=$(aws rds describe-db-instances --query "DBInstances[?starts_with(DBInstanceIdentifier, 'sentineldb')].DBInstanceIdentifier" --output text)
+          
+          # Delete each instance
+          for INSTANCE in $INSTANCES; do
+            echo "Deleting RDS instance: $INSTANCE"
+            aws rds delete-db-instance --db-instance-identifier $INSTANCE --skip-final-snapshot --delete-automated-backups
+          done
+          
+          echo "Waiting for RDS instances to be deleted..."
+          sleep 300 # Wait 5 minutes for instances to start deleting
+
+      - name: Delete DB Subnet Groups
+        run: |
+          # List all DB subnet groups with sentineldb prefix
+          SUBNET_GROUPS=$(aws rds describe-db-subnet-groups --query "DBSubnetGroups[?starts_with(DBSubnetGroupName, 'sentineldb')].DBSubnetGroupName" --output text)
+          
+          # Delete each subnet group
+          for GROUP in $SUBNET_GROUPS; do
+            echo "Deleting DB subnet group: $GROUP"
+            aws rds delete-db-subnet-group --db-subnet-group-name $GROUP || true
+          done
+
+      - name: Delete S3 Buckets
+        run: |
+          # List all S3 buckets with sentineldb prefix
+          BUCKETS=$(aws s3api list-buckets --query "Buckets[?starts_with(Name, 'sentineldb')].Name" --output text)
+          
+          # Empty and delete each bucket
+          for BUCKET in $BUCKETS; do
+            echo "Emptying and deleting S3 bucket: $BUCKET"
+            aws s3 rm s3://$BUCKET --recursive
+            aws s3api delete-bucket --bucket $BUCKET
+          done
+
+      - name: Delete VPCs and Related Resources
+        run: |
+          # List VPCs with SentinelDB tag
+          VPCS=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=*SentinelDB*" --query "Vpcs[].VpcId" --output text)
+          
+          for VPC in $VPCS; do
+            echo "Processing VPC: $VPC"
+            
+            # Delete any EC2 instances in the VPC
+            INSTANCES=$(aws ec2 describe-instances --filters "Name=vpc-id,Values=$VPC" --query "Reservations[].Instances[].InstanceId" --output text)
+            for INSTANCE in $INSTANCES; do
+              echo "Terminating EC2 instance: $INSTANCE"
+              aws ec2 terminate-instances --instance-ids $INSTANCE
+            done
+            
+            # Wait for instances to terminate
+            if [ ! -z "$INSTANCES" ]; then
+              echo "Waiting for instances to terminate..."
+              sleep 120
+            fi
+            
+            # Delete NAT Gateways
+            NAT_GATEWAYS=$(aws ec2 describe-nat-gateways --filter "Name=vpc-id,Values=$VPC" --query "NatGateways[].NatGatewayId" --output text)
+            for NAT in $NAT_GATEWAYS; do
+              echo "Deleting NAT Gateway: $NAT"
+              aws ec2 delete-nat-gateway --nat-gateway-id $NAT
+            done
+            
+            # Wait for NAT Gateways to delete
+            if [ ! -z "$NAT_GATEWAYS" ]; then
+              echo "Waiting for NAT Gateways to delete..."
+              sleep 120
+            fi
+            
+            # Delete Load Balancers
+            LBS=$(aws elbv2 describe-load-balancers --query "LoadBalancers[?VpcId=='$VPC'].LoadBalancerArn" --output text)
+            for LB in $LBS; do
+              echo "Deleting Load Balancer: $LB"
+              aws elbv2 delete-load-balancer --load-balancer-arn $LB
+            done
+            
+            # Wait for Load Balancers to delete
+            if [ ! -z "$LBS" ]; then
+              echo "Waiting for Load Balancers to delete..."
+              sleep 60
+            fi
+            
+            # Delete Security Groups (except default)
+            SECURITY_GROUPS=$(aws ec2 describe-security-groups --filters "Name=vpc-id,Values=$VPC" --query "SecurityGroups[?GroupName!='default'].GroupId" --output text)
+            for SG in $SECURITY_GROUPS; do
+              echo "Deleting Security Group: $SG"
+              aws ec2 delete-security-group --group-id $SG || true
+            done
+            
+            # Detach and delete Internet Gateways
+            IGWs=$(aws ec2 describe-internet-gateways --filters "Name=attachment.vpc-id,Values=$VPC" --query "InternetGateways[].InternetGatewayId" --output text)
+            for IGW in $IGWs; do
+              echo "Detaching and deleting Internet Gateway: $IGW"
+              aws ec2 detach-internet-gateway --internet-gateway-id $IGW --vpc-id $VPC
+              aws ec2 delete-internet-gateway --internet-gateway-id $IGW
+            done
+            
+            # Delete Subnets
+            SUBNETS=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$VPC" --query "Subnets[].SubnetId" --output text)
+            for SUBNET in $SUBNETS; do
+              echo "Deleting Subnet: $SUBNET"
+              aws ec2 delete-subnet --subnet-id $SUBNET
+            done
+            
+            # Delete Route Tables (except main)
+            ROUTE_TABLES=$(aws ec2 describe-route-tables --filters "Name=vpc-id,Values=$VPC" --query "RouteTables[?Associations[?Main!=\`true\`]].RouteTableId" --output text)
+            for RT in $ROUTE_TABLES; do
+              echo "Deleting Route Table: $RT"
+              aws ec2 delete-route-table --route-table-id $RT || true
+            done
+            
+            # Finally delete the VPC
+            echo "Deleting VPC: $VPC"
+            aws ec2 delete-vpc --vpc-id $VPC || true
+          done
+
+      - name: Report Cleanup Status
+        run: |
+          echo "Cleanup completed. Remaining resources:"
+          echo "VPCs with SentinelDB name:"
+          aws ec2 describe-vpcs --filters "Name=tag:Name,Values=*SentinelDB*" --query "Vpcs[].VpcId" --output text || echo "None"
+          
+          echo "RDS instances with sentineldb prefix:"
+          aws rds describe-db-instances --query "DBInstances[?starts_with(DBInstanceIdentifier, 'sentineldb')].DBInstanceIdentifier" --output text || echo "None"
+          
+          echo "S3 buckets with sentineldb prefix:"
+          aws s3api list-buckets --query "Buckets[?starts_with(Name, 'sentineldb')].Name" --output text || echo "None"
