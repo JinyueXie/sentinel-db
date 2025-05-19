@@ -56,6 +56,8 @@ jobs:
       - name: Terraform Plan
         id: plan
         run: terraform plan -no-color -input=false -out=tfplan
+        env:
+          TF_VAR_rds_password: ${{ secrets.TF_VAR_RDS_PASSWORD }}
   terraform_apply_on_main_push:
     name: Terraform Apply (on push to main)
     # This job runs if:
@@ -85,16 +87,18 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
       - name: Terraform Init
         run: terraform init -input=false
+      - name: Prepare Environment Variables
+        run: echo "TF_VAR_rds_password=${{ secrets.TF_VAR_RDS_PASSWORD }}" >> $GITHUB_ENV
       - name: Import Existing Resources
         run: |
           # Import subnet group
-          terraform import aws_db_subnet_group.rds_subnet_group sentineldb-rds-subnet-group-dev
+          terraform import -input=false aws_db_subnet_group.rds_subnet_group sentineldb-rds-subnet-group-dev || echo "Import failed but continuing"
           # Import S3 bucket
-          terraform import aws_s3_bucket.backups sentineldb-db-backups-dev-388062816353
+          terraform import -input=false aws_s3_bucket.backups sentineldb-db-backups-dev-388062816353 || echo "Import failed but continuing"
       - name: Terraform Apply
-        run: terraform apply -auto-approve -input=false -var="rds_password=${{ secrets.TF_VAR_RDS_PASSWORD }}"
-        # To use a plan file from a previous job (more advanced setup needed for passing artifacts):
-        # run: terraform apply -auto-approve -input=false tfplan 
+        run: terraform apply -auto-approve -input=false
+        env:
+          TF_VAR_rds_password: ${{ secrets.TF_VAR_RDS_PASSWORD }}
   terraform_manual_action:
     name: Terraform Manual Action (Plan/Apply/Destroy)
     if: github.event_name == 'workflow_dispatch' # Only when manually triggered
@@ -115,22 +119,29 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
       - name: Terraform Init
         run: terraform init -input=false
+      - name: Prepare Environment Variables
+        run: echo "TF_VAR_rds_password=${{ secrets.TF_VAR_RDS_PASSWORD }}" >> $GITHUB_ENV
       - name: Import Existing Resources
         run: |
           # Import subnet group
-          terraform import aws_db_subnet_group.rds_subnet_group sentineldb-rds-subnet-group-dev
+          terraform import -input=false aws_db_subnet_group.rds_subnet_group sentineldb-rds-subnet-group-dev || echo "Import failed but continuing"
           # Import S3 bucket
-          terraform import aws_s3_bucket.backups sentineldb-db-backups-dev-388062816353
+          terraform import -input=false aws_s3_bucket.backups sentineldb-db-backups-dev-388062816353 || echo "Import failed but continuing"
       - name: Terraform Plan (Manual)
         if: github.event.inputs.action == 'plan'
         run: terraform plan -no-color -input=false
+        env:
+          TF_VAR_rds_password: ${{ secrets.TF_VAR_RDS_PASSWORD }}
       - name: Terraform Apply (Manual)
         if: github.event.inputs.action == 'apply'
-        run: terraform apply -auto-approve -input=false -var="rds_password=${{ secrets.TF_VAR_RDS_PASSWORD }}"
+        run: terraform apply -auto-approve -input=false
+        env:
+          TF_VAR_rds_password: ${{ secrets.TF_VAR_RDS_PASSWORD }}
       - name: Terraform Destroy (Manual)
         if: github.event.inputs.action == 'destroy'
         run: |
           echo "🚨 Preparing to DESTROY infrastructure in AWS region: ${{ env.AWS_REGION }} 🚨"
           echo "Verify this is the intended action for environment defined in terraform/aws/"
-          terraform destroy -auto-approve -input=false -var="rds_password=${{ secrets.TF_VAR_RDS_PASSWORD }}"
-
+          terraform destroy -auto-approve -input=false
+        env:
+          TF_VAR_rds_password: ${{ secrets.TF_VAR_RDS_PASSWORD }}
