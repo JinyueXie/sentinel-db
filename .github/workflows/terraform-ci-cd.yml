@@ -115,7 +115,7 @@ jobs:
         run: terraform plan -no-color -input=false
       - name: Terraform Apply (Manual)
         if: github.event.inputs.action == 'apply'
-        run: terraform apply -auto-approve -input=false
+        run: terraform apply -auto-approve -input=false -var="rds_password=${{ secrets.TF_VAR_RDS_PASSWORD }}"
       - name: Terraform Destroy (Manual)
         if: github.event.inputs.action == 'destroy'
         run: |
