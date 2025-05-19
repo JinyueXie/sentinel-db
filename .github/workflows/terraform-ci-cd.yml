@@ -80,8 +80,8 @@ jobs:
     if: | # Using a multi-line block scalar for readability of the condition
       github.event_name == 'push' &&
       github.ref == 'refs/heads/main' &&
-      !contains(lower(github.event.head_commit.message), 'docs:') &&
-      !contains(lower(github.event.head_commit.message), 'readme')
+      !contains(toLowerCase(github.event.head_commit.message), 'docs:') &&
+      !contains(toLowerCase(github.event.head_commit.message), 'readme')
     runs-on: ubuntu-latest
     defaults:
       run:
